@@ -1,0 +1,35 @@
+# --- Secrets : ne jamais publier ---
+*.key
+*.pem
+*.p12
+*.pfx
+id_*
+!id_*.pub
+*webadmin
+.env
+.env.*
+
+# --- Notes de travail locales ---
+*-correction.md
+brouillon/
+private/
+
+# --- VMware / VirtualBox ---
+*.vmdk
+*.vmx
+*.vmsd
+*.vmxf
+*.nvram
+*.vmem
+*.vmss
+*.iso
+*.ova
+*.ovf
+*.vdi
+*.log
+
+# --- Système ---
+Thumbs.db
+desktop.ini
+.DS_Store
+.obsidian/
