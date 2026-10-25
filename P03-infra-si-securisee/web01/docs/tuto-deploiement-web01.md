@@ -41,7 +41,7 @@ network:
         - to: default
           via: 10.0.10.254
       nameservers:
-        addresses: [1.1.1.1]
+        addresses: [192.168.93.2]   # proxy DNS VMware (1.1.1.1 bloqué par NordVPN sur l'hôte)
 EOF
 sudo chmod 600 /etc/netplan/01-web01.yaml
 sudo netplan apply
@@ -51,6 +51,10 @@ sudo netplan apply
 > ⚠️ `sudo cat > fichier` ne marche pas (la redirection n'est pas root) : utiliser `sudo tee`.
 
 ✅ Vérif : `ip -br a` → `10.0.10.10/24` UP ; `ip route` → `default via 10.0.10.254`.
+
+> **Pourquoi un DNS externe et pas celui de l'AD (10.0.20.10) ?**
+> web01 est en DMZ : c'est la machine la plus exposée, donc la plus susceptible d'être compromise. Lui faire utiliser le DNS de l'AD obligerait à ouvrir un flux **DMZ → Serveurs** vers ad01, c'est-à-dire un accès direct au contrôleur de domaine depuis la zone la moins sûre. Or web01 n'en a aucun besoin : il n'est pas membre du domaine `p03.lan` et ne résout que des noms publics (Let's Encrypt, DuckDNS, dépôts apt).
+> → web01 garde un résolveur externe, joint via fw01 en NAT. Matrice de flux : DMZ → WAN autorisé (DNS, HTTPS), **DMZ → Serveurs interdit**. Principe de cloisonnement entre zones de confiance (ANSSI, guide d'administration sécurisée v3.0, R16).
 
 > Sans la carte NAT, web01 sort sur Internet **via fw01** (route, NAT, ports 53/123/80/443).
 > Tant que fw01 n'est pas prêt, `webadmin.sh` ne pourra pas faire apt ni le certificat.

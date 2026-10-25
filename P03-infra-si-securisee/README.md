@@ -14,9 +14,9 @@ Le réseau est découpé en 5 zones. `fw01` est la passerelle de chacune (`.254`
 |---|---|---|---|
 | WAN | NAT | Sortie Internet | `fw01` |
 | DMZ | 10.0.10.0/24 | Services exposés | `web01` (Apache) |
-| Serveurs | 10.0.20.0/24 | Services internes | `DC` (Windows Server 2025, AD / DNS) |
-| Admin | 10.0.30.0/24 | Administration uniquement | Poste admin (Windows 11 + RSAT) |
-| Users | 10.0.40.0/24 | Postes de travail | Poste utilisateur (Windows 11) |
+| Serveurs | 10.0.20.0/24 | Services internes | `ad01` (Windows Server 2025 Core, AD / DNS) |
+| Admin | 10.0.30.0/24 | Administration uniquement | `win01`, poste admin (Windows 11 + RSAT) |
+| Users | 10.0.40.0/24 | Postes de travail | `win02`, poste utilisateur (Windows 11) |
 
 `fw01` fait à la fois **routeur et pare-feu** : tout le filtrage est centralisé chez lui, les serveurs n'ont pas de pare-feu local. C'est aussi lui qui n'autorise le SSH vers les serveurs que depuis la zone Admin. Sur les serveurs, l'accès se fait uniquement par clé.
 
@@ -26,7 +26,7 @@ Le réseau est découpé en 5 zones. `fw01` est la passerelle de chacune (`.254`
 |---|---|---|---|
 | `web01` | Serveur web Apache durci, déployé par un script | [web01/](web01/) | ✅ Terminé |
 | `fw01` | Pare-feu, routage et NAT entre les zones | `fw01/` | 🚧 En cours |
-| `DC` | Active Directory, GPO, politiques de mots de passe admin / utilisateurs | `ad/` | ⏳ À venir |
+| `ad01` | Domaine `p03.lan` : OU, comptes séparés, mots de passe, GPO, LAPS | [ad01/](ad01/) | 🚧 En cours |
 
 ## web01 : le serveur web
 
@@ -58,6 +58,22 @@ La première version échouait à la phase 4 : Apache affichait encore sa versio
 
 👉 Le pas-à-pas complet est dans le [tuto de déploiement](web01/docs/tuto-deploiement-web01.md).
 
+## ad01 : le contrôleur de domaine
+
+Windows Server 2025 en **Server Core** (sans interface graphique : moins de composants, donc moins de surface d'attaque), administré depuis le poste admin avec les consoles RSAT. Le domaine `p03.lan` est préparé par un seul script, [`ad01-setup-domaine.ps1`](ad01/scripts/ad01-setup-domaine.ps1), idempotent lui aussi.
+
+| Mesure | Pourquoi | Référence |
+|---|---|---|
+| OU séparées pour postes admin, postes utilisateurs, comptes utilisateurs et comptes admin | Appliquer des règles différentes selon le niveau de risque | |
+| Deux comptes par administrateur : `alx-wrk` (quotidien) et `alx-org` (admin du domaine) | Ne jamais naviguer ou lire ses mails avec un compte à privilèges | ANSSI administration sécurisée |
+| Deux politiques de mots de passe (PSO) : 12 caractères pour les utilisateurs, 16 pour les admins, complexité, historique, verrouillage | Exigence plus forte là où l'impact d'une compromission est le plus grand | ANSSI mots de passe |
+| `alx-org` limité à `win01` et `ad01`, non délégable, membre de Protected Users | Un mot de passe admin volé est inutilisable ailleurs, pas de NTLM ni d'identifiants en cache | ANSSI administration sécurisée |
+| Verrouillage de session après 10 min avec mot de passe | Pas de session ouverte laissée sans surveillance | |
+| Stratégie de restriction logicielle sur les postes utilisateurs : seuls Windows et Program Files peuvent s'exécuter | Un utilisateur ne peut pas lancer un programme téléchargé | |
+| Bureau à distance interdit aux comptes administrateurs locaux | Empêcher les rebonds avec un mot de passe local réutilisé | |
+| Windows LAPS : mot de passe admin local unique par poste, changé tous les 30 jours, chiffré dans l'AD | Un poste compromis ne donne pas la clé des autres | |
+| `web01` (DMZ) n'utilise pas le DNS de l'AD | Aucun flux DMZ → Serveurs : la machine la plus exposée n'a pas accès au contrôleur de domaine | ANSSI administration sécurisée R16 |
+
 ## Outils
 
-VMware Workstation · Ubuntu Server · Apache2 · OpenSSH · UFW · acme.sh · Windows Server 2025 · Active Directory
+VMware Workstation · Ubuntu Server · Apache2 · OpenSSH · UFW · acme.sh · Windows Server 2025 · Active Directory · PowerShell · GPO · Windows LAPS
