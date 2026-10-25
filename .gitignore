@@ -8,6 +8,7 @@ id_*
 *webadmin
 .env
 .env.*
+.vault/
 
 # --- Notes de travail locales ---
 *-correction.md

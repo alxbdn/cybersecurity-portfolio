@@ -20,7 +20,7 @@ Chaque projet part d'un besoin d'entreprise : je conçois la solution, je la mon
 
 ## Outils et domaines
 
-`Linux` `Apache` `OpenSSH` `UFW` `TLS / Let's Encrypt` `Bash` `VMware` `Windows Server` `Active Directory` `ANSSI`
+`Linux` `Apache` `OpenSSH` `nftables` `TLS / Let's Encrypt` `Bash` `VMware` `Windows Server` `Active Directory` `ANSSI`
 
 ## Note
 

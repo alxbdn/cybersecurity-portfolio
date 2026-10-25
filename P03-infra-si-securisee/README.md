@@ -4,76 +4,106 @@
 
 ## En bref
 
-J'ai monté l'infrastructure d'une petite entreprise dans un lab VMware : un pare-feu central, un réseau découpé en zones, un serveur web exposé sur Internet et un domaine Active Directory. Chaque mesure est choisie en fonction du risque (principe de proportionnalité), justifiée et prouvée par un test.
+J'ai monté l'infrastructure d'une petite entreprise dans un lab VMware : un pare-feu central, un réseau découpé en zones, un serveur web exposé sur Internet, un domaine Active Directory et deux postes de travail. Chaque mesure est choisie en fonction du risque (principe de proportionnalité), justifiée et prouvée par un test. Tout est déployé par des scripts idempotents, qu'on peut relancer sans risque.
 
 ## Architecture
 
-Le réseau est découpé en 5 zones. `fw01` est la passerelle de chacune (`.254`) et filtre tout ce qui passe d'une zone à l'autre.
+```
+                         Internet
+                            │
+                     VMnet8 (NAT) · 192.168.93.0/24
+                            │
+                    ┌───────┴───────┐
+                    │     fw01      │  routeur + pare-feu (nftables)
+                    │  .254 partout │  politique drop par défaut
+                    └─┬───┬───┬───┬─┘
+          ┌───────────┘   │   │   └────────────┐
+          │               │   │                │
+   DMZ 10.0.10.0/24  Serveurs 10.0.20.0/24  Admin 10.0.30.0/24  Users 10.0.40.0/24
+       web01             ad01                  win01               win02
+   Apache, HTTPS     AD DS + DNS           poste admin         poste utilisateur
+                     p03.lan               RSAT, clé SSH       AppLocker
+```
 
-| Zone | Réseau | Rôle | Machines |
-|---|---|---|---|
-| WAN | NAT | Sortie Internet | `fw01` |
-| DMZ | 10.0.10.0/24 | Services exposés | `web01` (Apache) |
-| Serveurs | 10.0.20.0/24 | Services internes | `ad01` (Windows Server 2025 Core, AD / DNS) |
-| Admin | 10.0.30.0/24 | Administration uniquement | `win01`, poste admin (Windows 11 + RSAT) |
-| Users | 10.0.40.0/24 | Postes de travail | `win02`, poste utilisateur (Windows 11) |
+| Zone | VMnet | Réseau | Machine | Rôle |
+|---|---|---|---|---|
+| WAN | VMnet8 (NAT) | 192.168.93.0/24 | `fw01` (`.10`) | Sortie Internet |
+| DMZ | VMnet11 | 10.0.10.0/24 | `web01` (`.10`) | Site public `alxbdn.duckdns.org` |
+| Serveurs | VMnet12 | 10.0.20.0/24 | `ad01` (`.10`) | Windows Server 2025 Standard, AD / DNS |
+| Admin | VMnet13 | 10.0.30.0/24 | `win01` (`.10`) | Windows 11 + RSAT, seul point d'administration |
+| Users | VMnet14 | 10.0.40.0/24 | `win02` (`.10`) | Windows 11, poste utilisateur |
 
-`fw01` fait à la fois **routeur et pare-feu** : tout le filtrage est centralisé chez lui, les serveurs n'ont pas de pare-feu local. C'est aussi lui qui n'autorise le SSH vers les serveurs que depuis la zone Admin. Sur les serveurs, l'accès se fait uniquement par clé.
+`fw01` est la passerelle (`.254`) de chaque zone. Le PC hôte n'est branché que sur la zone Admin.
 
-## Composants
+## Les choix et leur raison
 
-| Machine | Ce qui est fait | Dossier | État |
-|---|---|---|---|
-| `web01` | Serveur web Apache durci, déployé par un script | [web01/](web01/) | ✅ Terminé |
-| `fw01` | Pare-feu, routage et NAT entre les zones | `fw01/` | 🚧 En cours |
-| `ad01` | Domaine `p03.lan` : OU, comptes séparés, mots de passe, GPO, LAPS | [ad01/](ad01/) | 🚧 En cours |
-
-## web01 : le serveur web
-
-Un seul script, [`webadmin.sh`](web01/scripts/webadmin.sh), installe et verrouille le serveur en 6 phases, en vérifiant chacune. On peut le relancer sans risque (idempotent).
-
-| Mesure | Pourquoi | Référence |
+| Choix | Pourquoi | Référence |
 |---|---|---|
-| Compte dédié `webadmin` pour gérer le site, sans mot de passe | Ne pas administrer en root, moindre privilège | ANSSI NT OpenSSH R21 |
-| SSH par clé uniquement (ECDSA P-256), compte `webadmin` seul, root interdit | Rendre le vol de mot de passe inutile | ANSSI NT OpenSSH R9, R10, R17, R22 |
-| Apache n'affiche plus sa version, pas de listing de dossiers, méthode TRACE coupée | Donner le moins d'informations possible à un attaquant | Guide ANSSI sites web |
-| Pas de pare-feu local : le filtrage est fait par `fw01` | Un seul point de contrôle, des règles plus simples à auditer et sans doublon | |
-| HTTPS avec un vrai certificat Let's Encrypt, TLS 1.2 / 1.3, HSTS | Chiffrer les échanges, empêcher le retour en HTTP | Guide ANSSI TLS |
-| Token DuckDNS demandé au lancement, jamais écrit sur disque | Aucun secret dans le code | |
+| Réseau découpé en 5 zones de confiance | Une machine compromise ne voit que sa zone | ANSSI administration sécurisée |
+| Filtrage centralisé sur `fw01`, politique `drop` par défaut, refus journalisés | Un seul point de contrôle, simple à auditer ; seul ce qui est utile passe | ANSSI filtrage réseau |
+| Administration uniquement depuis la zone Admin (`win01`) | Les ports d'admin (SSH, RDP, WinRM, RSAT) ne sont joignables que depuis le poste dédié | ANSSI administration sécurisée |
+| Deux barrières pour le DC : `fw01` **et** le pare-feu Windows d'`ad01` | Si une règle de `fw01` saute, un poste utilisateur ne peut toujours pas administrer le DC | Défense en profondeur |
+| `web01` n'utilise pas le DNS de l'AD | Aucun flux DMZ → Serveurs : la machine la plus exposée n'atteint jamais le contrôleur de domaine | ANSSI admin. sécurisée R16 |
+| SSH par clé ECDSA uniquement, compte `webadmin` seul, root interdit | Un mot de passe volé ne sert à rien | ANSSI NT OpenSSH R9, R10, R17, R22 |
+| Apache sans version, sans listing, TRACE coupé ; HTTPS Let's Encrypt, TLS 1.2 / 1.3, HSTS | Moins d'informations pour l'attaquant, échanges chiffrés | Guides ANSSI sites web et TLS |
+| Deux comptes par admin : `alx-wrk` (quotidien) et `alx-org` (domaine) | Jamais de navigation ou de mail avec un compte à privilèges | ANSSI administration sécurisée |
+| `alx-org` limité à `win01` / `ad01`, non délégable, Protected Users | Un mot de passe admin volé est inutilisable ailleurs, pas de NTLM ni de cache | ANSSI administration sécurisée |
+| Deux politiques de mots de passe : 12 caractères (utilisateurs), 16 (admins) | Exigence plus forte là où l'impact est le plus grand | ANSSI mots de passe |
+| Windows LAPS : admin local unique par poste, changé tous les 30 jours | Un poste compromis ne donne pas la clé des autres | |
+| AppLocker sur les postes utilisateurs | Un utilisateur ne peut pas lancer un programme téléchargé | |
+| Verrouillage de session 10 min, RDP interdit aux comptes locaux | Pas de session abandonnée, pas de rebond avec un mot de passe local | |
+| Aucun secret dans les scripts (token DuckDNS demandé au lancement) | Le dépôt peut être public | |
 
-### Preuves
+**Proportionnalité** : pas de SIEM, de bastion ni de PKI interne pour une entreprise de cette taille. Évolutions possibles : `ad01` en Server Core, un compte dédié au support des postes.
 
-| Test | Capture |
-|---|---|
-| Le script passe toutes ses phases | [01](web01/captures/01_webadmin-test_7-phases-OK.png) |
-| Le compte `setup` est refusé en SSH, Apache ne montre pas sa version, HSTS présent | [02](web01/captures/02_ssh-setup-refuse_curl-Server-Apache-HSTS.png) |
-| `webadmin` se connecte avec sa clé | [03](web01/captures/03_ssh-webadmin-cle-OK_mkdir-test.png) |
-| Un dossier sans index renvoie 403 au lieu de lister les fichiers | [04](web01/captures/04_directory-listing-desactive-403.png) |
-| Certificat Let's Encrypt valide | [05](web01/captures/05_certificat-LetsEncrypt-YE2.png) |
-| Le site répond en HTTPS | [06](web01/captures/06_https-alxbdn-duckdns-org.png) |
+## Ordre de déploiement
 
-### Ce que j'ai appris en route
+| # | Machine | Étape | Guide |
+|---|---|---|---|
+| 1 | `fw01` | Réseau 5 cartes, **routage + NAT seulement** (tout passe) | [fw01](fw01/README.md) |
+| 2 | `web01` | Réseau DMZ, `webadmin.sh` | [web01](web01/README.md) |
+| 3 | `ad01` | Promotion `p03.lan`, puis `ad01-setup-domain.ps1` et `ad01-setup-gpo.ps1` | [ad01](ad01/README.md) |
+| 4 | `win01` | RSAT (en NAT), jonction, vérif LAPS / GPO, clé SSH vers web01 | [postes](postes/README.md) |
+| 5 | `win02` | Jonction, vérif LAPS / GPO, test AppLocker | [postes](postes/README.md) |
+| 6 | `ad01` | `ad01-harden-ports.ps1` lancé depuis `win01` | [ad01](ad01/README.md#5-fermer-les-ports-dadministration) |
+| 7 | `fw01` | **Filtrage complet** : matrice ci-dessous | [fw01](fw01/README.md#4-étape-2--filtrage-complet) |
+| 8 | Lab | Décocher la carte de l'hôte sur VMnet11 / 12 / 14 | |
 
-La première version échouait à la phase 4 : Apache affichait encore sa version malgré `ServerTokens Prod` ([capture](web01/captures/00_bug_ServerTokens-ecrase-par-security-conf.png)). Le fichier `security.conf` d'Ubuntu était lu **après** le mien et écrasait le réglage. Je l'ai désactivé dans le script, et c'est justement la vérification automatique qui avait repéré le problème.
+Pourquoi le filtrage en dernier : pendant le montage, un flux bloqué ressemble à une panne. On valide chaque machine d'abord, puis on ferme, et chaque flux qui manque apparaît dans les logs `fw01-fwd-drop`.
 
-👉 Le pas-à-pas complet est dans le [tuto de déploiement](web01/docs/tuto-deploiement-web01.md).
+## Matrice des flux
 
-## ad01 : le contrôleur de domaine
+Appliquée par [`nftables-02-full.conf`](fw01/config/nftables-02-full.conf). Tout ce qui n'est pas listé est refusé et journalisé.
 
-Windows Server 2025 en **Server Core** (sans interface graphique : moins de composants, donc moins de surface d'attaque), administré depuis le poste admin avec les consoles RSAT. Le domaine `p03.lan` est préparé par un seul script, [`ad01-setup-domaine.ps1`](ad01/scripts/ad01-setup-domaine.ps1), idempotent lui aussi.
+| Depuis | Vers | Ports | Usage |
+|---|---|---|---|
+| Internet | `web01` | 443 (DNAT) | Site public |
+| `web01` | Internet | 53, 123, 80, 443 | DNS, heure, apt, certificat |
+| Admin | `web01` | 22, 443 | Admin par clé, test du site |
+| Admin + Users | `ad01` | 53, 88, 123, 135, 389, 445, 464, 636, 3268-3269, 49152-65535 | Ce qu'un membre du domaine doit joindre |
+| Admin | `ad01` | 3389, 5985, 9389 | RDP, WinRM, RSAT |
+| `ad01` | Internet | 53, 123, 80, 443 | Redirecteur DNS, heure, Windows Update |
+| Admin | `fw01` | 22 | Admin du pare-feu |
+| DMZ | Serveurs | ✗ | `web01` ne parle jamais au DC |
+| Users | Admin, DMZ, Internet | ✗ | Un poste utilisateur ne parle qu'à `ad01` |
 
-| Mesure | Pourquoi | Référence |
-|---|---|---|
-| OU séparées pour postes admin, postes utilisateurs, comptes utilisateurs et comptes admin | Appliquer des règles différentes selon le niveau de risque | |
-| Deux comptes par administrateur : `alx-wrk` (quotidien) et `alx-org` (admin du domaine) | Ne jamais naviguer ou lire ses mails avec un compte à privilèges | ANSSI administration sécurisée |
-| Deux politiques de mots de passe (PSO) : 12 caractères pour les utilisateurs, 16 pour les admins, complexité, historique, verrouillage | Exigence plus forte là où l'impact d'une compromission est le plus grand | ANSSI mots de passe |
-| `alx-org` limité à `win01` et `ad01`, non délégable, membre de Protected Users | Un mot de passe admin volé est inutilisable ailleurs, pas de NTLM ni d'identifiants en cache | ANSSI administration sécurisée |
-| Verrouillage de session après 10 min avec mot de passe | Pas de session ouverte laissée sans surveillance | |
-| Stratégie de restriction logicielle sur les postes utilisateurs : seuls Windows et Program Files peuvent s'exécuter | Un utilisateur ne peut pas lancer un programme téléchargé | |
-| Bureau à distance interdit aux comptes administrateurs locaux | Empêcher les rebonds avec un mot de passe local réutilisé | |
-| Windows LAPS : mot de passe admin local unique par poste, changé tous les 30 jours, chiffré dans l'AD | Un poste compromis ne donne pas la clé des autres | |
-| `web01` (DMZ) n'utilise pas le DNS de l'AD | Aucun flux DMZ → Serveurs : la machine la plus exposée n'a pas accès au contrôleur de domaine | ANSSI administration sécurisée R16 |
+## Machines
+
+| Machine | Ce qui est fait | Guide | État |
+|---|---|---|---|
+| `fw01` | Routage, NAT, filtrage entre zones | [fw01/](fw01/README.md) | 🚧 Filtrage complet à appliquer |
+| `web01` | Apache durci, SSH par clé, HTTPS | [web01/](web01/README.md) | ✅ |
+| `ad01` | Domaine `p03.lan` : OU, comptes séparés, PSO, GPO, AppLocker, LAPS, ports d'admin fermés | [ad01/](ad01/README.md) | ✅ |
+| `win01` / `win02` | Joints dans leur OU, GPO et LAPS vérifiés, AppLocker testé | [postes/](postes/README.md) | ✅ |
+
+Commandes de vérification et de dépannage : [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
+## Ce que j'ai appris en route
+
+- **Une vérification automatique trouve les vrais bugs.** `webadmin.sh` échouait à la phase 4 : `security.conf` d'Ubuntu était lu après mon réglage et rendait sa version à Apache ([capture](web01/captures/00_bug_ServerTokens-ecrase-par-security-conf.png)).
+- **Une GPO reçue n'est pas une GPO appliquée.** La restriction logicielle (SRP) est ignorée par Windows 11, d'où AppLocker. Et AppLocker lui-même ne s'appliquait pas tant que son extension n'était pas déclarée sur la GPO : le script l'ajoute maintenant ([preuve](postes/captures/01_applocker-win02-whoami-bloque.png)).
+- **Deux barrières valent mieux qu'une.** Depuis `win02`, WinRM vers `ad01` est refusé alors que LDAP répond, même avec `fw01` encore ouvert ([capture](ad01/captures/02_win02-winrm-refuse-ldap-ok.png)).
 
 ## Outils
 
-VMware Workstation · Ubuntu Server · Apache2 · OpenSSH · UFW · acme.sh · Windows Server 2025 · Active Directory · PowerShell · GPO · Windows LAPS
+VMware Workstation · Ubuntu Server · nftables · Apache2 · OpenSSH · acme.sh · Windows Server 2025 · Active Directory · PowerShell · GPO · AppLocker · Windows LAPS
