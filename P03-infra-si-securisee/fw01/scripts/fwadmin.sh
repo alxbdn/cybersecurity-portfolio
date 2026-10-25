@@ -3,7 +3,7 @@
 # fwadmin.sh - SSH admin access to fw01 (Ubuntu Server, P03 firewall)
 # fwadmin account, ECDSA key only. Network restriction (Admin zone only): nftables (fw01-nft-apply.sh)
 #
-# Usage   : sudo fwadmin.sh   (installed in /usr/local/sbin, asks for fwadmin's sudo password)
+# Usage   : sudo fwadmin.sh   (installed in /usr/local/sbin, asks for fwadmin's sudo password on first run only)
 # Needs   : Netplan in place (ens36 = 10.0.30.254), VMware console open as a fallback.
 # Idempotent. Full log: /var/log/fwadmin.log
 # =============================================================================
@@ -45,10 +45,14 @@ check() { step "check: $1" retry "${@:2}"; }
 [[ $EUID -eq 0 ]]               || { echo "Run this script with sudo." >&2; exit 1; }
 # fwadmin password: only used for sudo (SSH stays key only).
 # Hidden input (-s), never written in the script or the shell history.
-read -rsp "sudo password for ${FW_USER}: " FW_PASS; echo
-read -rsp "Confirm: " FW_PASS2; echo
-[[ -n "$FW_PASS" && "$FW_PASS" == "$FW_PASS2" ]] || { echo "Empty or different passwords." >&2; exit 1; }
-unset FW_PASS2
+# Only asked when the account is created: re-running the script keeps the password.
+FW_PASS=""
+if ! id "$FW_USER" &>/dev/null; then
+  read -rsp "sudo password for ${FW_USER}: " FW_PASS; echo
+  read -rsp "Confirm: " FW_PASS2; echo
+  [[ -n "$FW_PASS" && "$FW_PASS" == "$FW_PASS2" ]] || { echo "Empty or different passwords." >&2; exit 1; }
+  unset FW_PASS2
+fi
 : >"$LOG"; chmod 600 "$LOG"
 echo "${B}fwadmin.sh${N} - fw01 - SSH: ${FW_USER} by key only"
 
@@ -60,7 +64,7 @@ echo "${B}fwadmin.sh${N} - fw01 - SSH: ${FW_USER} by key only"
 create_user() {
   id "$FW_USER" &>/dev/null || adduser --disabled-password --gecos "Firewall administrator" "$FW_USER"
   usermod -aG sudo,adm "$FW_USER"
-  echo "${FW_USER}:${FW_PASS}" | chpasswd
+  [[ -z "$FW_PASS" ]] || echo "${FW_USER}:${FW_PASS}" | chpasswd
 }
 
 phase 1 "User ${FW_USER}"

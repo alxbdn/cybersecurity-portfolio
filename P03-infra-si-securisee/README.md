@@ -68,6 +68,7 @@ J'ai monté l'infrastructure d'une petite entreprise dans un lab VMware : un par
 | 6 | `ad01` | `ad01-harden-ports.ps1` lancé depuis `win01` | [ad01](ad01/README.md#5-fermer-les-ports-dadministration) |
 | 7 | `fw01` | **Filtrage complet** : matrice ci-dessous | [fw01](fw01/README.md#6-étape-2--filtrage-complet) |
 | 8 | Lab | Décocher la carte de l'hôte sur VMnet11 / 12 / 14 | |
+| 9 | Lab | **Recette** : chaque flux autorisé et bloqué testé, preuves dans les logs | [RECETTE.md](RECETTE.md) |
 
 Pourquoi le filtrage en dernier : pendant le montage, un flux bloqué ressemble à une panne. On valide chaque machine d'abord, puis on ferme, et chaque flux qui manque apparaît dans les logs `fw01-fwd-drop`.
 
@@ -94,12 +95,13 @@ Appliquée par [`nftables-02-full.conf`](fw01/config/nftables-02-full.conf). Tou
 
 | Machine | Ce qui est fait | Guide | État |
 |---|---|---|---|
-| `fw01` | Routage, NAT, filtrage entre zones | [fw01/](fw01/README.md) | 🚧 Filtrage complet à appliquer |
+| `fw01` | Routage, NAT, filtrage entre zones | [fw01/](fw01/README.md) | ✅ Filtrage complet appliqué, blocage DMZ → Serveurs prouvé |
 | `web01` | Apache durci, SSH par clé, HTTPS | [web01/](web01/README.md) | ✅ |
 | `ad01` | Domaine `p03.lan` : OU, comptes séparés, PSO, GPO, AppLocker, LAPS, ports d'admin fermés | [ad01/](ad01/README.md) | ✅ |
 | `win01` / `win02` | Joints dans leur OU, GPO et LAPS vérifiés, AppLocker testé | [win0x/](win0x/README.md) | ✅ |
+| Maquette Cisco | La même architecture reproduite sous Cisco Packet Tracer | | 🚧 En cours |
 
-Commandes de vérification et de dépannage : [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+Recette (tous les flux testés, autorisés et bloqués) : [RECETTE.md](RECETTE.md). Commandes de vérification et de dépannage : [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ## Ce que j'ai appris en route
 
@@ -109,4 +111,4 @@ Commandes de vérification et de dépannage : [TROUBLESHOOTING.md](TROUBLESHOOTI
 
 ## Outils
 
-VMware Workstation · Ubuntu Server · nftables · Apache2 · OpenSSH · acme.sh · Windows Server 2025 · Active Directory · PowerShell · GPO · AppLocker · Windows LAPS
+VMware Workstation · Cisco Packet Tracer · Ubuntu Server · nftables · Apache2 · OpenSSH · acme.sh · Windows Server 2025 · Active Directory · PowerShell · GPO · AppLocker · Windows LAPS

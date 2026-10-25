@@ -65,7 +65,7 @@ sudo reboot
 
 Script [`fwadmin.sh`](scripts/fwadmin.sh), en 3 phases vérifiées :
 
-1. compte `fwadmin` dans les groupes `sudo` (mot de passe demandé au lancement, il ne sert qu'à sudo) et `adm` (lecture des journaux sans sudo) ;
+1. compte `fwadmin` dans les groupes `sudo` (mot de passe demandé seulement à la création du compte, il ne sert qu'à sudo) et `adm` (lecture des journaux sans sudo) ;
 2. clé publique ECDSA P-256 dédiée à fw01 dans `authorized_keys` ;
 3. `sshd` durci : clé uniquement, root interdit, `AllowUsers fwadmin`, pas de X11 ni d'agent (`AllowTcpForwarding local` garde VS Code Remote-SSH).
 
@@ -142,6 +142,8 @@ La matrice de flux appliquée :
 | **Tout le reste** | **refusé et journalisé** | DMZ → Serveurs, Users → Admin, Users → ports d'admin d'ad01, DNS direct… |
 
 ✅ Depuis win02 : `Test-NetConnection ad01 -Port 389` OK, `-Port 5985` échoue. Depuis win01 : `ssh web01` OK. Sur fw01 : `grep fw01-fwd-drop /var/log/fw01-nftables.log` montre les refus.
+
+✅ Filtrage complet appliqué sur fw01. Tests complets, zone par zone : [RECETTE.md](../RECETTE.md).
 
 ## Erreurs à éviter
 
