@@ -11,7 +11,7 @@ Deux clones d'un template Windows 11 Entreprise, joints au domaine `p03.lan` dir
 | Compte de travail | `P03\alx-org` | `P03\alx-wrk` |
 | En plus | RSAT, clé SSH vers web01 | AppLocker |
 
-Prérequis : [ad01](../ad01/README.md) jusqu'à l'étape 4 (OU et GPO en place), [fw01](../fw01/README.md) qui laisse passer les postes vers ad01.
+Prérequis : [ad01](../ad01/README.md) jusqu'à l'étape 4 (OU et GPO en place), [fw01](../fw01/README.md) qui laisse passer win01 et win02 vers ad01.
 
 ## Les scripts
 
@@ -19,7 +19,7 @@ Prérequis : [ad01](../ad01/README.md) jusqu'à l'étape 4 (OU et GPO en place),
 |---|---|
 | [`workstation-join.ps1`](scripts/workstation-join.ps1) | IP fixe, DNS = ad01, test de chaque maillon réseau, puis renommage + jonction dans la bonne OU |
 | [`workstation-check.ps1`](scripts/workstation-check.ps1) | Vérifie OU, GPO, verrouillage, refus RDP, AppLocker, LAPS. `-Cleanup` supprime le compte local provisoire |
-| [`win01-admin-tools.ps1`](scripts/win01-admin-tools.ps1) | win01 seulement : `-RSAT` (consoles d'admin), `-SSHKey` (clé `webadmin` + `.ssh\config`) |
+| [`win01-admin-tools.ps1`](scripts/win01-admin-tools.ps1) | win01 seulement : `-RSAT` (consoles d'admin), `-SSHKey` (clé `webadmin`, clé `fwadmin-win01` générée sur place, `.ssh\config` durci pour web01 et fw01) |
 
 Tous se lancent en PowerShell **admin**, dans Windows PowerShell 5.1 :
 `powershell -ExecutionPolicy Bypass -File .\<script>.ps1`
@@ -41,7 +41,7 @@ Pour que l'OOBE accepte le nom `setup`, le template ne doit contenir aucun compt
 | 5 | En `.\setup` : `workstation-check.ps1`. Tout doit être OK, il active l'`Administrator` LAPS | ✔ | ✔ |
 | 6 | Lire le mot de passe LAPS (sur ad01, ou win01 en `alx-org`) : `Get-LapsADPassword -Identity win0X -AsPlainText` | ✔ | ✔ |
 | 7 | Redémarrer, se connecter en `.\Administrator` avec ce mot de passe, puis `workstation-check.ps1 -Cleanup` | ✔ | ✔ |
-| 8 | En `P03\alx-org` : déposer la clé privée `webadmin` sur le Bureau, `win01-admin-tools.ps1 -SSHKey`, puis `ssh web01` | ✔ | |
+| 8 | En `P03\alx-org` : déposer la clé privée `webadmin` sur le Bureau, `win01-admin-tools.ps1 -SSHKey`, puis `ssh web01`. Ajouter la clé publique affichée sur fw01 pour `ssh fw01` | ✔ | |
 | 9 | En `P03\alx-wrk` : copier `C:\Windows\System32\whoami.exe` sur le Bureau et le lancer → bloqué | | ✔ |
 
 L'étape 7 est aussi la preuve que LAPS fonctionne. Snapshot de chaque poste à la fin.

@@ -7,7 +7,9 @@
                  powershell -ExecutionPolicy Bypass -File .\win01-admin-tools.ps1 -RSAT
 
     -SSHKey  AFTER the join, logged on as P03\alx-org: stores the webadmin private key in
-             alx-org's profile, readable by alx-org only. First drop the key file
+             alx-org's profile, generates the fwadmin-win01 key on the spot, makes both
+             readable by alx-org only and writes a hardened ~/.ssh/config (fw01 + web01).
+             First drop the key file
              (host: C:\Users\alxbdn\.ssh\webadmin) on alx-org's Desktop, then:
                  powershell -ExecutionPolicy Bypass -File .\win01-admin-tools.ps1 -SSHKey
 #>
@@ -39,11 +41,11 @@ if ($RSAT) {
     }
 }
 
-# --- webadmin SSH key -------------------------------------------------------------------------
+# --- SSH keys (webadmin + fwadmin-win01) + config ------------------------------------------
 # Key in the admin account, on the admin PC; fw01 only allows SSH to web01 from the Admin zone.
 # OpenSSH refuses a private key others can read: no inheritance, alx-org + SYSTEM only.
 if ($SSHKey) {
-    Step "webadmin SSH key for $env:USERNAME"
+    Step "SSH keys + config for $env:USERNAME"
     if ($env:USERNAME -ne 'alx-org') { throw "Run this step in the P03\alx-org session." }
     $Source = Join-Path ([Environment]::GetFolderPath('Desktop')) 'webadmin'
     $Folder = Join-Path $env:USERPROFILE '.ssh'
@@ -55,16 +57,45 @@ if ($SSHKey) {
     }
     icacls $Key /inheritance:r /grant:r "$($env:USERDOMAIN)\$($env:USERNAME):(R)" "*S-1-5-18:(F)" | Out-Null
     icacls $Key
-    $Config = Join-Path $Folder 'config'
-    if (-not (Test-Path $Config) -or -not (Select-String -Path $Config -Pattern '^Host web01' -Quiet)) {
-        Add-Content -Path $Config -Encoding ASCII -Value @(
-            'Host web01'
-            '    HostName 10.0.10.10'
-            '    User webadmin'
-            "    IdentityFile $Key"
-            '    IdentitiesOnly yes'
-        )
-        Write-Host "  + web01 entry in $Config"
+    # fwadmin-win01 key: generated ON win01 and never leaves it (ANSSI: one key per machine,
+    # no private key copied around). Only the public part goes to fw01.
+    $FwKey = Join-Path $Folder 'fwadmin-win01'
+    if (-not (Test-Path $FwKey)) {
+        Write-Host "  + generating the fwadmin-win01 key (pick a passphrase)"
+        ssh-keygen -t ecdsa -b 256 -f $FwKey -C 'fwadmin-win01'
     }
-    Write-Host "`nTest: ssh web01   (should log on as webadmin, no password)" -ForegroundColor Green
+    icacls $FwKey /inheritance:r /grant:r "$($env:USERDOMAIN)\$($env:USERNAME):(R)" "*S-1-5-18:(F)" | Out-Null
+
+    # Full ~/.ssh/config: hardened algorithms (ANSSI OpenSSH guide), one key per host,
+    # no agent or X11 forwarding. Rewritten on every run, the previous one is backed up.
+    $Config = Join-Path $Folder 'config'
+    if (Test-Path $Config) { Copy-Item $Config "$Config.bak-$(Get-Date -Format yyyyMMdd-HHmmss)" }
+    Set-Content -Path $Config -Encoding ASCII -Value @(
+        '# ~/.ssh/config - admin workstation win01 (written by win01-admin-tools.ps1)'
+        'Host *'
+        '    IdentitiesOnly yes'
+        '    ForwardAgent no'
+        '    ForwardX11 no'
+        '    StrictHostKeyChecking ask'
+        '    KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,ecdh-sha2-nistp256'
+        '    Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com'
+        '    MACs hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com'
+        '    ServerAliveInterval 60'
+        '    ServerAliveCountMax 3'
+        ''
+        'Host fw01'
+        '    HostName 10.0.30.254'
+        '    User fwadmin'
+        "    IdentityFile $FwKey"
+        ''
+        'Host web01'
+        '    HostName 10.0.10.10'
+        '    User webadmin'
+        "    IdentityFile $Key"
+    )
+    Write-Host "  + $Config written (fw01 + web01)"
+
+    Write-Host "`nPublic key to add on fw01 (~fwadmin/.ssh/authorized_keys):" -ForegroundColor Yellow
+    Get-Content "$FwKey.pub"
+    Write-Host "`nTests: ssh web01 (webadmin), then ssh fw01 (fwadmin) once the key is on fw01" -ForegroundColor Green
 }

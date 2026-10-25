@@ -69,7 +69,7 @@ powershell -ExecutionPolicy Bypass -File .\ad01-setup-gpo.ps1
 | AppLocker | Postes-Utilisateurs | Seuls Windows et Program Files s'exécutent, les admins gardent la main |
 | Windows LAPS | Tous les postes | Mot de passe admin local unique par poste, changé tous les 30 jours |
 
-✅ `Get-GPO -All | Select DisplayName` liste les 4 GPO `GPO-P03-*`. Les postes peuvent maintenant être joints : voir [win01 / win02](../postes/README.md).
+✅ `Get-GPO -All | Select DisplayName` liste les 4 GPO `GPO-P03-*`. Les postes peuvent maintenant être joints : voir [win01 / win02](../win0x/README.md).
 
 ## 5. Fermer les ports d'administration
 

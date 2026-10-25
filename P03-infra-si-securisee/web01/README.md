@@ -91,4 +91,4 @@ Puis snapshot **web01 OK**.
 | `ssh web01` demande un mot de passe | Le durcissement a été perdu (snapshot restauré) : relancer `sudo webadmin.sh` |
 | Mises à jour système | `webadmin` n'a pas sudo, c'est voulu : `sudo apt upgrade` depuis la console en `setup` |
 
-Pas-à-pas détaillé (script de test, version finale) : [tuto de déploiement](docs/tuto-deploiement-web01.md).
+Commandes de diagnostic : [TROUBLESHOOTING.md](../TROUBLESHOOTING.md#web01-ubuntu-apache).

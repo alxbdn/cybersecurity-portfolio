@@ -44,7 +44,7 @@ J'ai monté l'infrastructure d'une petite entreprise dans un lab VMware : un par
 | Administration uniquement depuis la zone Admin (`win01`) | Les ports d'admin (SSH, RDP, WinRM, RSAT) ne sont joignables que depuis le poste dédié | ANSSI administration sécurisée |
 | Deux barrières pour le DC : `fw01` **et** le pare-feu Windows d'`ad01` | Si une règle de `fw01` saute, un poste utilisateur ne peut toujours pas administrer le DC | Défense en profondeur |
 | `web01` n'utilise pas le DNS de l'AD | Aucun flux DMZ → Serveurs : la machine la plus exposée n'atteint jamais le contrôleur de domaine | ANSSI admin. sécurisée R16 |
-| SSH par clé ECDSA uniquement, compte `webadmin` seul, root interdit | Un mot de passe volé ne sert à rien | ANSSI NT OpenSSH R9, R10, R17, R22 |
+| SSH par clé ECDSA uniquement, un compte dédié par serveur (`webadmin`, `fwadmin`), root interdit | Un mot de passe volé ne sert à rien | ANSSI NT OpenSSH R9, R10, R17, R22 |
 | Apache sans version, sans listing, TRACE coupé ; HTTPS Let's Encrypt, TLS 1.2 / 1.3, HSTS | Moins d'informations pour l'attaquant, échanges chiffrés | Guides ANSSI sites web et TLS |
 | Deux comptes par admin : `alx-wrk` (quotidien) et `alx-org` (domaine) | Jamais de navigation ou de mail avec un compte à privilèges | ANSSI administration sécurisée |
 | `alx-org` limité à `win01` / `ad01`, non délégable, Protected Users | Un mot de passe admin volé est inutilisable ailleurs, pas de NTLM ni de cache | ANSSI administration sécurisée |
@@ -60,13 +60,13 @@ J'ai monté l'infrastructure d'une petite entreprise dans un lab VMware : un par
 
 | # | Machine | Étape | Guide |
 |---|---|---|---|
-| 1 | `fw01` | Réseau 5 cartes, **routage + NAT seulement** (tout passe) | [fw01](fw01/README.md) |
+| 1 | `fw01` | Réseau 5 cartes, SSH par clé (`fwadmin.sh`), **routage + NAT seulement** (tout passe, mais journalisé) | [fw01](fw01/README.md) |
 | 2 | `web01` | Réseau DMZ, `webadmin.sh` | [web01](web01/README.md) |
 | 3 | `ad01` | Promotion `p03.lan`, puis `ad01-setup-domain.ps1` et `ad01-setup-gpo.ps1` | [ad01](ad01/README.md) |
-| 4 | `win01` | RSAT (en NAT), jonction, vérif LAPS / GPO, clé SSH vers web01 | [postes](postes/README.md) |
-| 5 | `win02` | Jonction, vérif LAPS / GPO, test AppLocker | [postes](postes/README.md) |
+| 4 | `win01` | RSAT (en NAT), jonction, vérif LAPS / GPO, clé SSH vers web01 | [win0x](win0x/README.md) |
+| 5 | `win02` | Jonction, vérif LAPS / GPO, test AppLocker | [win0x](win0x/README.md) |
 | 6 | `ad01` | `ad01-harden-ports.ps1` lancé depuis `win01` | [ad01](ad01/README.md#5-fermer-les-ports-dadministration) |
-| 7 | `fw01` | **Filtrage complet** : matrice ci-dessous | [fw01](fw01/README.md#4-étape-2--filtrage-complet) |
+| 7 | `fw01` | **Filtrage complet** : matrice ci-dessous | [fw01](fw01/README.md#6-étape-2--filtrage-complet) |
 | 8 | Lab | Décocher la carte de l'hôte sur VMnet11 / 12 / 14 | |
 
 Pourquoi le filtrage en dernier : pendant le montage, un flux bloqué ressemble à une panne. On valide chaque machine d'abord, puis on ferme, et chaque flux qui manque apparaît dans les logs `fw01-fwd-drop`.
@@ -83,9 +83,12 @@ Appliquée par [`nftables-02-full.conf`](fw01/config/nftables-02-full.conf). Tou
 | Admin + Users | `ad01` | 53, 88, 123, 135, 389, 445, 464, 636, 3268-3269, 49152-65535 | Ce qu'un membre du domaine doit joindre |
 | Admin | `ad01` | 3389, 5985, 9389 | RDP, WinRM, RSAT |
 | `ad01` | Internet | 53, 123, 80, 443 | Redirecteur DNS, heure, Windows Update |
-| Admin | `fw01` | 22 | Admin du pare-feu |
+| Users | Internet | 80, 443 | Navigation web (le DNS passe par `ad01`, jamais en direct) |
+| Users | `web01` | 443 | Le site de l'entreprise |
+| Admin | Users | 3389, 5985, ping | Support des postes utilisateurs depuis la zone Admin |
+| Admin | `fw01` | 22 | Admin du pare-feu (connexions journalisées) |
 | DMZ | Serveurs | ✗ | `web01` ne parle jamais au DC |
-| Users | Admin, DMZ, Internet | ✗ | Un poste utilisateur ne parle qu'à `ad01` |
+| Users | Admin, ports d'admin d'`ad01`, DNS direct | ✗ | Un poste utilisateur n'administre rien |
 
 ## Machines
 
@@ -94,14 +97,14 @@ Appliquée par [`nftables-02-full.conf`](fw01/config/nftables-02-full.conf). Tou
 | `fw01` | Routage, NAT, filtrage entre zones | [fw01/](fw01/README.md) | 🚧 Filtrage complet à appliquer |
 | `web01` | Apache durci, SSH par clé, HTTPS | [web01/](web01/README.md) | ✅ |
 | `ad01` | Domaine `p03.lan` : OU, comptes séparés, PSO, GPO, AppLocker, LAPS, ports d'admin fermés | [ad01/](ad01/README.md) | ✅ |
-| `win01` / `win02` | Joints dans leur OU, GPO et LAPS vérifiés, AppLocker testé | [postes/](postes/README.md) | ✅ |
+| `win01` / `win02` | Joints dans leur OU, GPO et LAPS vérifiés, AppLocker testé | [win0x/](win0x/README.md) | ✅ |
 
 Commandes de vérification et de dépannage : [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ## Ce que j'ai appris en route
 
 - **Une vérification automatique trouve les vrais bugs.** `webadmin.sh` échouait à la phase 4 : `security.conf` d'Ubuntu était lu après mon réglage et rendait sa version à Apache ([capture](web01/captures/00_bug_ServerTokens-ecrase-par-security-conf.png)).
-- **Une GPO reçue n'est pas une GPO appliquée.** La restriction logicielle (SRP) est ignorée par Windows 11, d'où AppLocker. Et AppLocker lui-même ne s'appliquait pas tant que son extension n'était pas déclarée sur la GPO : le script l'ajoute maintenant ([preuve](postes/captures/01_applocker-win02-whoami-bloque.png)).
+- **Une GPO reçue n'est pas une GPO appliquée.** La restriction logicielle (SRP) est ignorée par Windows 11, d'où AppLocker. Et AppLocker lui-même ne s'appliquait pas tant que son extension n'était pas déclarée sur la GPO : le script l'ajoute maintenant ([preuve](win0x/captures/01_applocker-win02-whoami-bloque.png)).
 - **Deux barrières valent mieux qu'une.** Depuis `win02`, WinRM vers `ad01` est refusé alors que LDAP répond, même avec `fw01` encore ouvert ([capture](ad01/captures/02_win02-winrm-refuse-ldap-ok.png)).
 
 ## Outils
