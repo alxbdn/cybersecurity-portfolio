@@ -48,6 +48,7 @@ J'ai monté l'infrastructure d'une petite entreprise dans un lab VMware : un par
 | Apache sans version, sans listing, TRACE coupé ; HTTPS Let's Encrypt, TLS 1.2 / 1.3, HSTS | Moins d'informations pour l'attaquant, échanges chiffrés | Guides ANSSI sites web et TLS |
 | Deux comptes par admin : `alx-wrk` (quotidien) et `alx-org` (domaine) | Jamais de navigation ou de mail avec un compte à privilèges | ANSSI administration sécurisée |
 | `alx-org` limité à `win01` / `ad01`, non délégable, Protected Users | Un mot de passe admin volé est inutilisable ailleurs, pas de NTLM ni de cache | ANSSI administration sécurisée |
+| Le poste admin `win01` n'accède pas à Internet, seul `win02` navigue | Un poste d'administration qui navigue est le premier vecteur de vol des comptes à privilèges. Le critère « postes Windows en web » est rempli par le poste utilisateur | ANSSI administration sécurisée (poste d'admin dédié, sans Internet) |
 | Deux politiques de mots de passe : 12 caractères (utilisateurs), 16 (admins) | Exigence plus forte là où l'impact est le plus grand | ANSSI mots de passe |
 | Windows LAPS : admin local unique par poste, changé tous les 30 jours | Un poste compromis ne donne pas la clé des autres | |
 | AppLocker sur les postes utilisateurs | Un utilisateur ne peut pas lancer un programme téléchargé | |
@@ -99,7 +100,7 @@ Appliquée par [`nftables-02-full.conf`](fw01/config/nftables-02-full.conf). Tou
 | `web01` | Apache durci, SSH par clé, HTTPS | [web01/](web01/README.md) | ✅ |
 | `ad01` | Domaine `p03.lan` : OU, comptes séparés, PSO, GPO, AppLocker, LAPS, ports d'admin fermés | [ad01/](ad01/README.md) | ✅ |
 | `win01` / `win02` | Joints dans leur OU, GPO et LAPS vérifiés, AppLocker testé | [win0x/](win0x/README.md) | ✅ |
-| Maquette Cisco | La même architecture reproduite sous Cisco Packet Tracer | | 🚧 En cours |
+| Maquette Cisco | La même architecture reproduite sous Cisco Packet Tracer : VLAN, port-security, DAI, VoIP | [packet-tracer/](packet-tracer/README.md) | 🚧 Configs prêtes, à tester |
 
 Recette (tous les flux testés, autorisés et bloqués) : [RECETTE.md](RECETTE.md). Commandes de vérification et de dépannage : [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 

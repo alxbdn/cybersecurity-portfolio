@@ -68,7 +68,7 @@ Le seul endroit d'où l'on administre. À lancer en session `P03\alx-org`.
 | A7 | Admin → DNS de l'AD | `Resolve-DnsName ad01.p03.lan` | ✓ `10.0.20.10` | |
 | A8 | Admin → win02 RDP | `Test-NetConnection 10.0.40.10 -Port 3389` | ✓ `True` si RDP est activé sur win02, sinon `False` sans ligne `fwd-drop` (c'est win02 qui refuse) | |
 | A9 | Admin → win02 ping | `ping -n 2 10.0.40.10` | ✓ réponses si le pare-feu Windows de win02 autorise l'ICMP | |
-| A10 | Admin → Internet | `Test-NetConnection ubuntu.com -Port 443` | ✗ `False` (la zone Admin ne navigue pas) | |
+| A10 | Admin → Internet | `Test-NetConnection ubuntu.com -Port 443` | ✗ `False` (choix assumé : poste d'admin sans Internet, voir [README](README.md#les-choix-et-leur-raison)) | |
 | A11 | Admin → web01 en ping | `ping -n 2 10.0.10.10` | ✗ délai dépassé (seuls 22 et 443 sont ouverts) | |
 
 Mot de passe SSH refusé, même depuis la bonne zone :
@@ -130,6 +130,18 @@ Une capture par famille suffit, rangée dans `fw01/captures/` :
 3. **L'administration cloisonnée** : A1 qui marche depuis win01, U11 qui échoue depuis win02.
 4. **La défense en profondeur** : U8 (WinRM refusé depuis Users).
 5. **La politique** : F1 (`policy drop`).
+
+**Déjà obtenues pendant le montage**
+
+| Preuve | Capture |
+|---|---|
+| Filtrage appliqué, 6 phases vertes | [fw01/captures/01](fw01/captures/01_fw01-nft-apply_6-phases-OK.png) |
+| D1 + D4 : web01 sort sur Internet, SMB vers ad01 bloqué | [fw01/captures/02](fw01/captures/02_web01-internet-OK_smb-ad01-bloque.png) |
+| D4 : la ligne `fw01-fwd-drop` correspondante | [fw01/captures/03](fw01/captures/03_fw01-fwd-drop_dmz-vers-serveurs.png) |
+| Site servi en HTTPS avec HSTS | [fw01/captures/04](fw01/captures/04_fw01-curl-web01-HSTS.png) |
+| A4 : RDP vers ad01 depuis win01 en `alx-org` | [ad01/captures/04](ad01/captures/04_ad01-rdp-depuis-win01-alx-org.png) |
+| `alx-org` non délégable : double saut refusé | [ad01/captures/05](ad01/captures/05_ad01-double-saut-refuse-non-delegable.png) |
+| U8 : WinRM refusé depuis win02, LDAP OK | [ad01/captures/02](ad01/captures/02_win02-winrm-refuse-ldap-ok.png) |
 
 ## Si un test ne donne pas le bon résultat
 

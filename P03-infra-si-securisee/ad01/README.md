@@ -54,7 +54,7 @@ powershell -ExecutionPolicy Bypass -File .\ad01-setup-domain.ps1
 
 Il demande le mot de passe de `alx-wrk` (12 caractères mini) et de `alx-org` (16 mini). Ensuite, **changer le mot de passe de `P03\Administrator`** pour qu'il respecte la PSO admin (16 caractères) : il devient le compte de secours, à ne plus utiliser au quotidien.
 
-✅ `Get-ADUserResultantPasswordPolicy alx-org` → `PSO-Admins`.
+✅ `Get-ADUserResultantPasswordPolicy alx-org` → `PSO-Admins`. Postes rangés dans leur OU : [capture](captures/03_ad01-ordinateurs-dans-leur-OU.png).
 
 ## 4. GPO
 
@@ -80,6 +80,8 @@ Invoke-Command -ComputerName ad01 -FilePath .\ad01-harden-ports.ps1
 ```
 
 ✅ Depuis win01 : `Enter-PSSession ad01` fonctionne. Depuis win02 : `Test-NetConnection ad01 -Port 5985` échoue alors que le port 389 répond, même avec fw01 encore ouvert ([capture](captures/02_win02-winrm-refuse-ldap-ok.png)). Rapport des ports : [capture](captures/01_ad01-harden-ports.png).
+
+RDP depuis win01 en `alx-org` : [capture](captures/04_ad01-rdp-depuis-win01-alx-org.png) · double saut refusé (`alx-org` non délégable) : [capture](captures/05_ad01-double-saut-refuse-non-delegable.png).
 
 ## Erreurs à éviter
 

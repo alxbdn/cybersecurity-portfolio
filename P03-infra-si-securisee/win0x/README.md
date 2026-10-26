@@ -52,6 +52,7 @@ L'étape 7 est aussi la preuve que LAPS fonctionne. Snapshot de chaque poste à 
 - Plus aucun compte local commun aux clones : seul l'`Administrator` LAPS reste, avec un mot de passe différent par poste.
 - `ssh web01` par clé depuis win01, sans mot de passe.
 - `whoami.exe` lancé depuis le Bureau de `alx-wrk` : « This app has been blocked by your system administrator » ([capture](captures/01_applocker-win02-whoami-bloque.png)).
+- Preuves : [workstation-check OK](captures/02_win01-workstation-check-OK.png) · [mot de passe LAPS chiffré dans l'AD](captures/03_win01-laps-mot-de-passe-chiffre-AD.png) · [RSAT installé](captures/04_win01-rsat-installe.png) · [GPO win01](captures/05_win01-gpresult-gpo-appliquees.png) · [GPO + AppLocker win02](captures/06_win02-gpo-applocker-appliquees.png)
 
 ## Erreurs à éviter
 

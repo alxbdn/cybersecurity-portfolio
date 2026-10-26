@@ -105,6 +105,8 @@ scp fw01-nft-apply.sh nftables-01-null.conf nftables-02-full.conf fw01:~
 sudo install -m 700 ~/fw01-nft-apply.sh /usr/local/sbin/
 ```
 
+✅ [6 phases OK](captures/01_fw01-nft-apply_6-phases-OK.png)
+
 ## 5. Étape 1 : routage + NAT
 
 ```bash
@@ -145,6 +147,8 @@ La matrice de flux appliquée :
 
 ✅ Filtrage complet appliqué sur fw01. Tests complets, zone par zone : [RECETTE.md](../RECETTE.md).
 
+Preuves : [web01 sort, SMB vers ad01 bloqué](captures/02_web01-internet-OK_smb-ad01-bloque.png) · [drop DMZ → Serveurs journalisé](captures/03_fw01-fwd-drop_dmz-vers-serveurs.png) · [HTTPS + HSTS vers web01](captures/04_fw01-curl-web01-HSTS.png)
+
 ## Erreurs à éviter
 
 | Piège | Ce qu'il faut faire |
@@ -156,6 +160,7 @@ La matrice de flux appliquée :
 | Se couper l'accès SSH | Lancer `fwadmin.sh` depuis la zone Admin, garder la session ouverte, tester dans une 2e fenêtre avant de supprimer `setup`. Secours : console VMware |
 | Une règle cassée coupe tout le réseau | Passer par `fw01-nft-apply.sh` (retour arrière automatique) plutôt que `cp` + `reload`, et garder la console VMware ouverte |
 | Rester sur l'étape 1 « parce que ça marche » | Un fw01 ouvert contredit la politique `drop` par défaut : passer à l'étape 2 avant la recette |
+| logrotate refuse `/var/log` (`root:syslog` 775) | `su root syslog` dans le bloc logrotate, géré par le script ([capture](captures/00_bug_logrotate-var-log-permissions.png)) |
 | Un flux légitime est bloqué | `tail -f /var/log/fw01-nftables.log \| grep fw01-fwd-drop` donne SRC, DST et DPT : c'est la règle à ajouter, ou le flux à ne pas autoriser |
 
 Commandes de diagnostic : [TROUBLESHOOTING.md](../TROUBLESHOOTING.md#fw01-ubuntu-nftables).
