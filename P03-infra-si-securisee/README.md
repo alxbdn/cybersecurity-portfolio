@@ -61,21 +61,21 @@ J'ai monté l'infrastructure d'une petite entreprise dans un lab VMware : un par
 
 | # | Machine | Étape | Guide |
 |---|---|---|---|
-| 1 | `fw01` | Réseau 5 cartes, SSH par clé (`fwadmin.sh`), **routage + NAT seulement** (tout passe, mais journalisé) | [fw01](fw01/README.md) |
-| 2 | `web01` | Réseau DMZ, `webadmin.sh` | [web01](web01/README.md) |
-| 3 | `ad01` | Promotion `p03.lan`, puis `ad01-setup-domain.ps1` et `ad01-setup-gpo.ps1` | [ad01](ad01/README.md) |
-| 4 | `win01` | RSAT (en NAT), jonction, vérif LAPS / GPO, clé SSH vers web01 | [win0x](win0x/README.md) |
-| 5 | `win02` | Jonction, vérif LAPS / GPO, test AppLocker | [win0x](win0x/README.md) |
-| 6 | `ad01` | `ad01-harden-ports.ps1` lancé depuis `win01` | [ad01](ad01/README.md#5-fermer-les-ports-dadministration) |
-| 7 | `fw01` | **Filtrage complet** : matrice ci-dessous | [fw01](fw01/README.md#6-étape-2--filtrage-complet) |
+| 1 | `fw01` | Réseau 5 cartes, SSH par clé (`fwadmin.sh`), **routage + NAT seulement** (tout passe, mais journalisé) | [fw01](VM%20LAB/fw01/README.md) |
+| 2 | `web01` | Réseau DMZ, `webadmin.sh` | [web01](VM%20LAB/web01/README.md) |
+| 3 | `ad01` | Promotion `p03.lan`, puis `ad01-setup-domain.ps1` et `ad01-setup-gpo.ps1` | [ad01](VM%20LAB/ad01/README.md) |
+| 4 | `win01` | RSAT (en NAT), jonction, vérif LAPS / GPO, clé SSH vers web01 | [win0x](VM%20LAB/win0x/README.md) |
+| 5 | `win02` | Jonction, vérif LAPS / GPO, test AppLocker | [win0x](VM%20LAB/win0x/README.md) |
+| 6 | `ad01` | `ad01-harden-ports.ps1` lancé depuis `win01` | [ad01](VM%20LAB/ad01/README.md#5-fermer-les-ports-dadministration) |
+| 7 | `fw01` | **Filtrage complet** : matrice ci-dessous | [fw01](VM%20LAB/fw01/README.md#6-étape-2--filtrage-complet) |
 | 8 | Lab | Décocher la carte de l'hôte sur VMnet11 / 12 / 14 | |
-| 9 | Lab | **Recette** : chaque flux autorisé et bloqué testé, preuves dans les logs | [RECETTE.md](RECETTE.md) |
+| 9 | Lab | **Recette** : chaque flux autorisé et bloqué testé, preuves dans les logs | [RECETTE.md](VM%20LAB/RECETTE.md) |
 
 Pourquoi le filtrage en dernier : pendant le montage, un flux bloqué ressemble à une panne. On valide chaque machine d'abord, puis on ferme, et chaque flux qui manque apparaît dans les logs `fw01-fwd-drop`.
 
 ## Matrice des flux
 
-Appliquée par [`nftables-02-full.conf`](fw01/config/nftables-02-full.conf). Tout ce qui n'est pas listé est refusé et journalisé.
+Appliquée par [`nftables-02-full.conf`](VM%20LAB/fw01/config/nftables-02-full.conf). Tout ce qui n'est pas listé est refusé et journalisé.
 
 | Depuis | Vers | Ports | Usage |
 |---|---|---|---|
@@ -96,19 +96,19 @@ Appliquée par [`nftables-02-full.conf`](fw01/config/nftables-02-full.conf). Tou
 
 | Machine | Ce qui est fait | Guide | État |
 |---|---|---|---|
-| `fw01` | Routage, NAT, filtrage entre zones | [fw01/](fw01/README.md) | ✅ Filtrage complet appliqué, blocage DMZ → Serveurs prouvé |
-| `web01` | Apache durci, SSH par clé, HTTPS | [web01/](web01/README.md) | ✅ |
-| `ad01` | Domaine `p03.lan` : OU, comptes séparés, PSO, GPO, AppLocker, LAPS, ports d'admin fermés | [ad01/](ad01/README.md) | ✅ |
-| `win01` / `win02` | Joints dans leur OU, GPO et LAPS vérifiés, AppLocker testé | [win0x/](win0x/README.md) | ✅ |
-| Maquette Cisco | La même architecture reproduite sous Cisco Packet Tracer : VLAN, port-security, DAI, VoIP | [packet-tracer/](packet-tracer/README.md) | 🚧 Configs prêtes, à tester |
+| `fw01` | Routage, NAT, filtrage entre zones | [fw01/](VM%20LAB/fw01/README.md) | ✅ Filtrage complet appliqué, blocage DMZ → Serveurs prouvé |
+| `web01` | Apache durci, SSH par clé, HTTPS | [web01/](VM%20LAB/web01/README.md) | ✅ |
+| `ad01` | Domaine `p03.lan` : OU, comptes séparés, PSO, GPO, AppLocker, LAPS, ports d'admin fermés | [ad01/](VM%20LAB/ad01/README.md) | ✅ |
+| `win01` / `win02` | Joints dans leur OU, GPO et LAPS vérifiés, AppLocker testé | [win0x/](VM%20LAB/win0x/README.md) | ✅ |
+| Maquette Cisco | La même architecture reproduite sous Cisco Packet Tracer : VLAN, port-security, DAI, VoIP | [Cisco Lab/](Cisco%20Lab/README.md) | 🚧 Configs prêtes, à tester |
 
-Recette (tous les flux testés, autorisés et bloqués) : [RECETTE.md](RECETTE.md). Commandes de vérification et de dépannage : [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+Recette (tous les flux testés, autorisés et bloqués) : [RECETTE.md](VM%20LAB/RECETTE.md). Commandes de vérification et de dépannage : [TROUBLESHOOTING.md](VM%20LAB/TROUBLESHOOTING.md).
 
 ## Ce que j'ai appris en route
 
-- **Une vérification automatique trouve les vrais bugs.** `webadmin.sh` échouait à la phase 4 : `security.conf` d'Ubuntu était lu après mon réglage et rendait sa version à Apache ([capture](web01/captures/00_bug_ServerTokens-ecrase-par-security-conf.png)).
-- **Une GPO reçue n'est pas une GPO appliquée.** La restriction logicielle (SRP) est ignorée par Windows 11, d'où AppLocker. Et AppLocker lui-même ne s'appliquait pas tant que son extension n'était pas déclarée sur la GPO : le script l'ajoute maintenant ([preuve](win0x/captures/01_applocker-win02-whoami-bloque.png)).
-- **Deux barrières valent mieux qu'une.** Depuis `win02`, WinRM vers `ad01` est refusé alors que LDAP répond, même avec `fw01` encore ouvert ([capture](ad01/captures/02_win02-winrm-refuse-ldap-ok.png)).
+- **Une vérification automatique trouve les vrais bugs.** `webadmin.sh` échouait à la phase 4 : `security.conf` d'Ubuntu était lu après mon réglage et rendait sa version à Apache ([capture](VM%20LAB/web01/captures/00_bug_ServerTokens-ecrase-par-security-conf.png)).
+- **Une GPO reçue n'est pas une GPO appliquée.** La restriction logicielle (SRP) est ignorée par Windows 11, d'où AppLocker. Et AppLocker lui-même ne s'appliquait pas tant que son extension n'était pas déclarée sur la GPO : le script l'ajoute maintenant ([preuve](VM%20LAB/win0x/captures/01_applocker-win02-whoami-bloque.png)).
+- **Deux barrières valent mieux qu'une.** Depuis `win02`, WinRM vers `ad01` est refusé alors que LDAP répond, même avec `fw01` encore ouvert ([capture](VM%20LAB/ad01/captures/02_win02-winrm-refuse-ldap-ok.png)).
 
 ## Outils
 

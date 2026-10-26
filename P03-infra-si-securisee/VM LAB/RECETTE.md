@@ -68,7 +68,7 @@ Le seul endroit d'où l'on administre. À lancer en session `P03\alx-org`.
 | A7 | Admin → DNS de l'AD | `Resolve-DnsName ad01.p03.lan` | ✓ `10.0.20.10` | |
 | A8 | Admin → win02 RDP | `Test-NetConnection 10.0.40.10 -Port 3389` | ✓ `True` si RDP est activé sur win02, sinon `False` sans ligne `fwd-drop` (c'est win02 qui refuse) | |
 | A9 | Admin → win02 ping | `ping -n 2 10.0.40.10` | ✓ réponses si le pare-feu Windows de win02 autorise l'ICMP | |
-| A10 | Admin → Internet | `Test-NetConnection ubuntu.com -Port 443` | ✗ `False` (choix assumé : poste d'admin sans Internet, voir [README](README.md#les-choix-et-leur-raison)) | |
+| A10 | Admin → Internet | `Test-NetConnection ubuntu.com -Port 443` | ✗ `False` (choix assumé : poste d'admin sans Internet, voir [README](../README.md#les-choix-et-leur-raison)) | |
 | A11 | Admin → web01 en ping | `ping -n 2 10.0.10.10` | ✗ délai dépassé (seuls 22 et 443 sont ouverts) | |
 
 Mot de passe SSH refusé, même depuis la bonne zone :
