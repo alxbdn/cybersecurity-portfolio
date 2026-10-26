@@ -1,0 +1,25 @@
+! =====================================================================
+! ISP - Cisco 2911 - simule le fournisseur d'acces et "Internet"
+! Hors perimetre de l'entreprise : configuration minimale.
+! =====================================================================
+! Un seul bloc, a coller au prompt Router> (repondre "no" au dialogue initial)
+! Passage en mode privilegie puis en mode configuration globale
+enable
+configure terminal
+hostname ISP
+no ip domain-lookup
+! Lien vers FW01 (adresses de documentation RFC 5737)
+interface gigabitEthernet 0/0
+ description Lien vers FW01 (WAN entreprise)
+ ip address 198.51.100.1 255.255.255.252
+ no shutdown
+! Reseau "Internet" ou se trouve le serveur web externe de test
+interface gigabitEthernet 0/1
+ description Internet (serveur externe 203.0.113.10)
+ ip address 203.0.113.254 255.255.255.0
+ no shutdown
+! Sauvegarde AVANT de quitter le mode config : en sortant, la console
+! demande le login (login local) et avalerait la ligne suivante
+do write memory
+end
+! Pas de route vers 10.0.0.0 : l'entreprise sort en NAT, comme sur Internet.

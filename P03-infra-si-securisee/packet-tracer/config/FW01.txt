@@ -1,0 +1,290 @@
+! =====================================================================
+! FW01 - Cisco 2911 - routeur/pare-feu de la maquette P03
+! Joue le role de fw01 (nftables) du lab VMware : meme plan d'adressage,
+! meme matrice des flux, traduite en ACL etendues.
+! A coller tel quel depuis le prompt "Router>" ou "Switch>" (repondre "no" au dialogue initial).
+! Mots de passe en clair volontairement : propres a cette maquette de lab, utilises nulle
+! part ailleurs. La sauvegarde .pkt du depot les contient de toute facon.
+! =====================================================================
+! PREREQUIS (une seule fois, AVANT de coller ce fichier) : sur un 2911, la
+! telephonie CME (telephony-service) exige la licence UC. Sans elle, toutes
+! les commandes CME sont refusees. A taper a la main :
+!   Router>          enable
+!   Router#          configure terminal
+!   Router(config)#  license boot module c2900 technology-package uck9
+!                    Taper cette ligne a la main et valider avec Entree : collee,
+!                    elle saute la question du contrat et la licence n'est pas
+!                    retenue. Repondre "yes" a ACCEPT? [yes/no].
+!   Router(config)#  end
+!   Router#          write memory
+!   Router#          reload
+!   Verification, au prompt Router# : show version (ligne "uc" = uck9)
+! =====================================================================
+! Passage en mode privilegie puis en mode configuration globale
+enable
+configure terminal
+
+! --- Identite et hygiene de base ------------------------------------
+hostname FW01
+no ip domain-lookup
+service password-encryption
+! Refuse tout mot de passe de moins de 12 caracteres (meme regle que les users AD)
+security passwords min-length 12
+enable secret P@cketTracer-P03
+username netadmin privilege 15 secret P@cketTracer-P03
+service timestamps log datetime msec
+logging buffered 16384
+banner motd #Acces reserve aux administrateurs P03. Toute connexion est journalisee.#
+! Apres 3 echecs en 60 s, plus aucune connexion pendant 120 s (anti force brute)
+login block-for 120 attempts 3 within 60
+
+! --- SSH : seul acces distant, depuis win01 --------------------------
+ip domain-name p03.lan
+! Cle RSA 2048 bits de l'hote SSH (en une ligne : pas de question interactive)
+crypto key generate rsa general-keys modulus 2048
+ip ssh version 2
+ip ssh authentication-retries 3
+ip ssh time-out 60
+ip access-list standard ADMIN-SSH
+ remark SSH vers FW01 depuis win01 uniquement
+ permit host 10.0.30.10
+exit
+line console 0
+ login local
+ exec-timeout 10 0
+ logging synchronous
+line vty 0 15
+ access-class ADMIN-SSH in
+ transport input ssh
+ login local
+ exec-timeout 10 0
+exit
+
+! --- Interfaces : router-on-a-stick ----------------------------------
+! Un seul cable vers SW01, une sous-interface 802.1Q par zone.
+! Chaque sous-interface est la passerelle (.254) de sa zone, comme sur fw01.
+interface gigabitEthernet 0/0
+ description Trunk vers SW01 Gi0/1
+ no ip address
+ no shutdown
+interface gigabitEthernet 0/0.10
+ description DMZ - web01
+ encapsulation dot1Q 10
+ ip address 10.0.10.254 255.255.255.0
+ ip nat inside
+interface gigabitEthernet 0/0.20
+ description Serveurs - ad01
+ encapsulation dot1Q 20
+ ip address 10.0.20.254 255.255.255.0
+ ip nat inside
+interface gigabitEthernet 0/0.30
+ description Admin - win01 et SW01
+ encapsulation dot1Q 30
+ ip address 10.0.30.254 255.255.255.0
+ ip nat inside
+interface gigabitEthernet 0/0.40
+ description Users - win02
+ encapsulation dot1Q 40
+ ip address 10.0.40.254 255.255.255.0
+ ip nat inside
+! Pas de NAT pour la voix : les telephones ne sortent pas sur Internet
+interface gigabitEthernet 0/0.50
+ description Voix - telephones IP
+ encapsulation dot1Q 50
+ ip address 10.0.50.254 255.255.255.0
+! WAN : lien vers le FAI
+interface gigabitEthernet 0/1
+ description WAN vers ISP
+ ip address 198.51.100.2 255.255.255.252
+ ip nat outside
+ no cdp enable
+ no shutdown
+exit
+! Gi0/2 inutilise
+interface gigabitEthernet 0/2
+ shutdown
+exit
+! Route par defaut vers le FAI
+ip route 0.0.0.0 0.0.0.0 198.51.100.1
+
+! --- NAT ---------------------------------------------------------------
+! Sortie Internet : toutes les zones internes partagent l'IP WAN (PAT)
+ip access-list standard NAT-INTERNE
+ permit 10.0.0.0 0.0.255.255
+exit
+ip nat inside source list NAT-INTERNE interface gigabitEthernet 0/1 overload
+! Publication du site : seul le port 443 de web01 est expose sur l'IP WAN
+ip nat inside source static tcp 10.0.10.10 443 198.51.100.2 443
+
+! --- ACL de filtrage ----------------------------------------------------
+! Une ACL par zone, appliquee en ENTREE de sa sous-interface : elle dit ce que
+! la zone a le droit d'emettre. Tout le reste tombe sur le deny implicite.
+! Les ACL Cisco sont sans etat (contrairement a nftables) : les reponses
+! sont autorisees avec "established" (TCP) ou par port source (UDP).
+! Hotes : web01 10.0.10.10 | ad01 10.0.20.10 | win01 10.0.30.10 | win02 10.0.40.10
+
+! DMZ : web01 repond, sort vers Internet, ne parle jamais aux zones internes
+ip access-list extended DMZ-IN
+ remark Reponses HTTPS (Internet, Admin, Users) et SSH (Admin)
+ permit tcp host 10.0.10.10 eq 443 any established
+ permit tcp host 10.0.10.10 eq 22 10.0.30.0 0.0.0.255 established
+ remark Reponse au ping de la zone Admin
+ permit icmp host 10.0.10.10 10.0.30.0 0.0.0.255 echo-reply
+ remark Aucun flux initie vers les zones internes (ni vers le DC)
+ deny ip 10.0.10.0 0.0.0.255 10.0.0.0 0.0.255.255
+ remark Sorties Internet : DNS, heure, apt, certificat Let's Encrypt
+ permit udp host 10.0.10.10 any eq domain
+ permit udp host 10.0.10.10 any eq 123
+ permit tcp host 10.0.10.10 any eq www
+ permit tcp host 10.0.10.10 any eq 443
+exit
+
+! Serveurs : ad01 repond aux membres du domaine et sort vers Internet
+ip access-list extended SERVEURS-IN
+ remark Reponses TCP vers les postes (LDAP, Kerberos, SMB, RDP, RPC...)
+ permit tcp host 10.0.20.10 10.0.30.0 0.0.0.255 established
+ permit tcp host 10.0.20.10 10.0.40.0 0.0.0.255 established
+ remark Reponses UDP : DNS, Kerberos, NTP, CLDAP, kpasswd
+ permit udp host 10.0.20.10 eq domain 10.0.30.0 0.0.0.255
+ permit udp host 10.0.20.10 eq domain 10.0.40.0 0.0.0.255
+ permit udp host 10.0.20.10 eq 88 10.0.30.0 0.0.0.255
+ permit udp host 10.0.20.10 eq 88 10.0.40.0 0.0.0.255
+ permit udp host 10.0.20.10 eq 123 10.0.30.0 0.0.0.255
+ permit udp host 10.0.20.10 eq 123 10.0.40.0 0.0.0.255
+ permit udp host 10.0.20.10 eq 389 10.0.30.0 0.0.0.255
+ permit udp host 10.0.20.10 eq 389 10.0.40.0 0.0.0.255
+ permit udp host 10.0.20.10 eq 464 10.0.30.0 0.0.0.255
+ permit udp host 10.0.20.10 eq 464 10.0.40.0 0.0.0.255
+ permit icmp host 10.0.20.10 10.0.30.0 0.0.0.255 echo-reply
+ remark Aucun autre flux vers les zones internes
+ deny ip 10.0.20.0 0.0.0.255 10.0.0.0 0.0.255.255
+ remark Sorties Internet : redirecteur DNS, heure, Windows Update
+ permit udp host 10.0.20.10 any eq domain
+ permit udp host 10.0.20.10 any eq 123
+ permit tcp host 10.0.20.10 any eq www
+ permit tcp host 10.0.20.10 any eq 443
+exit
+
+! Admin : seul point d'administration de l'infrastructure
+ip access-list extended ADMIN-IN
+ remark Administration de web01 (SSH par cle) et test du site
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.10.10 eq 22
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.10.10 eq 443
+ remark Membre du domaine : DNS, Kerberos, NTP, RPC, LDAP, SMB, kpasswd, LDAPS, GC, RPC dynamique
+ permit udp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq domain
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq domain
+ permit udp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 88
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 88
+ permit udp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 123
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 135
+ permit udp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 389
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 389
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 445
+ permit udp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 464
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 464
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 636
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.20.10 range 3268 3269
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.20.10 range 49152 65535
+ remark Administration d'ad01 : RDP, WinRM, RSAT (ADWS)
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 3389
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 5985
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.20.10 eq 9389
+ remark Support des postes utilisateurs
+ permit tcp 10.0.30.0 0.0.0.255 10.0.40.0 0.0.0.255 eq 3389
+ permit tcp 10.0.30.0 0.0.0.255 10.0.40.0 0.0.0.255 eq 5985
+ remark Ping de diagnostic vers toutes les zones
+ permit icmp 10.0.30.0 0.0.0.255 10.0.0.0 0.0.255.255 echo
+ remark Administration de FW01 en SSH (filtre aussi par ADMIN-SSH sur les vty)
+ permit tcp 10.0.30.0 0.0.0.255 host 10.0.30.254 eq 22
+exit
+
+! Users : domaine, site de l'entreprise, navigation web, rien d'autre
+ip access-list extended USERS-IN
+ remark Membre du domaine (memes ports que la zone Admin, sans les ports d'admin)
+ permit udp 10.0.40.0 0.0.0.255 host 10.0.20.10 eq domain
+ permit tcp 10.0.40.0 0.0.0.255 host 10.0.20.10 eq domain
+ permit udp 10.0.40.0 0.0.0.255 host 10.0.20.10 eq 88
+ permit tcp 10.0.40.0 0.0.0.255 host 10.0.20.10 eq 88
+ permit udp 10.0.40.0 0.0.0.255 host 10.0.20.10 eq 123
+ permit tcp 10.0.40.0 0.0.0.255 host 10.0.20.10 eq 135
+ permit udp 10.0.40.0 0.0.0.255 host 10.0.20.10 eq 389
+ permit tcp 10.0.40.0 0.0.0.255 host 10.0.20.10 eq 389
+ permit tcp 10.0.40.0 0.0.0.255 host 10.0.20.10 eq 445
+ permit udp 10.0.40.0 0.0.0.255 host 10.0.20.10 eq 464
+ permit tcp 10.0.40.0 0.0.0.255 host 10.0.20.10 eq 464
+ permit tcp 10.0.40.0 0.0.0.255 host 10.0.20.10 eq 636
+ permit tcp 10.0.40.0 0.0.0.255 host 10.0.20.10 range 3268 3269
+ permit tcp 10.0.40.0 0.0.0.255 host 10.0.20.10 range 49152 65535
+ remark Site de l'entreprise
+ permit tcp 10.0.40.0 0.0.0.255 host 10.0.10.10 eq 443
+ remark Reponses au support (RDP/WinRM) et au ping venus de la zone Admin
+ permit tcp 10.0.40.0 0.0.0.255 10.0.30.0 0.0.0.255 established
+ permit icmp 10.0.40.0 0.0.0.255 10.0.30.0 0.0.0.255 echo-reply
+ remark Rien d'autre vers l'interne : ni zone Admin, ni ports d'admin d'ad01, ni FW01
+ deny ip 10.0.40.0 0.0.0.255 10.0.0.0 0.0.255.255
+ remark Navigation web (le DNS passe par ad01, jamais en direct)
+ permit tcp 10.0.40.0 0.0.0.255 any eq www
+ permit tcp 10.0.40.0 0.0.0.255 any eq 443
+exit
+
+! Voix : les telephones ne parlent qu'au CME (DHCP, TFTP, signalisation SCCP).
+! La voix (RTP) entre telephones reste dans le VLAN 50 et ne traverse pas FW01.
+ip access-list extended VOIX-IN
+ remark DHCP : le telephone n'a pas encore d'IP (source 0.0.0.0)
+ permit udp any any eq bootps
+ remark Fichier de configuration du telephone (TFTP, option 150)
+ permit udp 10.0.50.0 0.0.0.255 host 10.0.50.254 eq tftp
+ remark Enregistrement et signalisation SCCP aupres du CME
+ permit tcp 10.0.50.0 0.0.0.255 host 10.0.50.254 eq 2000
+exit
+
+! Internet : seul le site publie entre ; le reste ne passe que s'il est une reponse
+ip access-list extended WAN-IN
+ remark Site public (redirige vers web01 par le NAT statique)
+ permit tcp any host 198.51.100.2 eq 443
+ remark Reponses aux connexions sortantes (PAT sur l'IP WAN)
+ permit tcp any host 198.51.100.2 established
+ permit udp any eq domain host 198.51.100.2
+ permit udp any eq 123 host 198.51.100.2
+exit
+
+! Application des ACL en entree de chaque interface
+interface gigabitEthernet 0/0.10
+ ip access-group DMZ-IN in
+interface gigabitEthernet 0/0.20
+ ip access-group SERVEURS-IN in
+interface gigabitEthernet 0/0.30
+ ip access-group ADMIN-IN in
+interface gigabitEthernet 0/0.40
+ ip access-group USERS-IN in
+interface gigabitEthernet 0/0.50
+ ip access-group VOIX-IN in
+interface gigabitEthernet 0/1
+ ip access-group WAN-IN in
+exit
+
+! --- Telephonie IP (CME) : un poste par utilisateur ---------------------
+! DHCP des telephones, avec l'option 150 qui indique le serveur TFTP (FW01)
+ip dhcp excluded-address 10.0.50.200 10.0.50.254
+ip dhcp pool VOIX
+ network 10.0.50.0 255.255.255.0
+ default-router 10.0.50.254
+ option 150 ip 10.0.50.254
+exit
+! CME : 5 postes max (proportionne a la taille de l'entreprise)
+telephony-service
+ max-ephones 5
+ max-dn 5
+ ip source-address 10.0.50.254 port 2000
+ auto assign 1 to 5
+exit
+! Numeros internes : 1001 (admin, telephone de win01), 1002 (user, telephone de win02)
+ephone-dn 1
+ number 1001
+ephone-dn 2
+ number 1002
+exit
+! Sauvegarde AVANT de quitter le mode config : en sortant, la console
+! demande le login (login local) et avalerait la ligne suivante
+do write memory
+end

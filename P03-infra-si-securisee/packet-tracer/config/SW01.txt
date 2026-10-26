@@ -1,0 +1,192 @@
+! =====================================================================
+! SW01 - Cisco 2960-24TT - switch d'acces unique de la maquette P03
+! A coller tel quel depuis le prompt "Router>" ou "Switch>" (repondre "no" au dialogue initial).
+! Les lignes qui commencent par "!" sont des commentaires : IOS les ignore.
+! Mots de passe en clair volontairement : propres a cette maquette de lab, utilises nulle
+! part ailleurs. La sauvegarde .pkt du depot les contient de toute facon.
+! =====================================================================
+! Passage en mode privilegie puis en mode configuration globale
+enable
+configure terminal
+
+! --- Identite et hygiene de base ------------------------------------
+! Nom de l'equipement, visible dans le prompt et dans les logs
+hostname SW01
+! Evite que IOS prenne une faute de frappe pour un nom DNS a resoudre
+no ip domain-lookup
+! Chiffre (type 7) les mots de passe en clair qui resteraient dans la conf
+service password-encryption
+! Mot de passe du mode privilegie, stocke en hash (pas en clair)
+enable secret P@cketTracer-P03
+! Compte local nominatif utilise pour SSH (pas de mot de passe partage)
+username netadmin privilege 15 secret P@cketTracer-P03
+! Horodatage des logs, indispensable pour la tracabilite
+service timestamps log datetime msec
+! Journal conserve en memoire locale (show logging), comme fw01 dans le lab
+logging buffered 16384
+! Message legal affiche avant l'authentification
+banner motd #Acces reserve aux administrateurs P03. Toute connexion est journalisee.#
+
+! --- VLAN : un VLAN par zone de confiance ----------------------------
+vlan 10
+ name DMZ
+vlan 20
+ name SERVEURS
+vlan 30
+ name ADMIN
+vlan 40
+ name USERS
+! VLAN voix : les telephones IP sont isoles des PC (meme port physique)
+vlan 50
+ name VOIX
+! VLAN natif du trunk, qui ne porte aucune machine (contre le VLAN hopping)
+vlan 998
+ name NATIF-VIDE
+! VLAN "parking" des ports inutilises : un port active par erreur n'atteint rien
+vlan 999
+ name PARKING
+exit
+
+! --- Administration du switch : SSH seulement, depuis win01 ----------
+! Le VLAN 1 par defaut n'est pas utilise
+interface vlan 1
+ shutdown
+! Adresse de management dans la zone Admin, joignable sans passer par le routeur
+interface vlan 30
+ description Management SW01 (zone Admin)
+ ip address 10.0.30.253 255.255.255.0
+ no shutdown
+exit
+! Passerelle pour que le switch puisse repondre hors de son VLAN
+ip default-gateway 10.0.30.254
+! Domaine requis pour generer la cle RSA
+ip domain-name p03.lan
+! Cle RSA 2048 bits de l'hote SSH (en une ligne : pas de question interactive)
+crypto key generate rsa general-keys modulus 2048
+! SSHv2 uniquement (v1 est casse)
+ip ssh version 2
+! 3 essais de mot de passe par connexion, 60 s pour s'authentifier
+ip ssh authentication-retries 3
+ip ssh time-out 60
+! Seul le poste d'administration win01 peut ouvrir une session distante
+access-list 10 remark SSH vers SW01 depuis win01 uniquement
+access-list 10 permit host 10.0.30.10
+! Console : compte local, deconnexion apres 10 min d'inactivite
+line console 0
+ login local
+ exec-timeout 10 0
+ logging synchronous
+! Lignes distantes : SSH seul (pas de Telnet), filtre par l'ACL 10
+line vty 0 15
+ access-class 10 in
+ transport input ssh
+ login local
+ exec-timeout 10 0
+exit
+
+! --- Ports d'acces : un port = une machine connue --------------------
+! Principe commun a chaque port :
+!  - mode access + nonegotiate : le port ne peut pas devenir un trunk (DTP coupe)
+!  - portfast + bpduguard : un switch pirate branche ici coupe le port
+!  - port-security sticky : le switch retient la ou les MAC autorisees ;
+!    une MAC inconnue est rejetee et comptee (restrict), sans couper le service
+!  - no cdp enable : on ne divulgue pas le modele/IOS du switch aux machines
+interface fastEthernet 0/1
+ description web01 (DMZ)
+ switchport mode access
+ switchport access vlan 10
+ switchport nonegotiate
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ switchport port-security
+ switchport port-security maximum 1
+ switchport port-security mac-address sticky
+ switchport port-security violation restrict
+ no cdp enable
+ no shutdown
+interface fastEthernet 0/2
+ description ad01 (Serveurs)
+ switchport mode access
+ switchport access vlan 20
+ switchport nonegotiate
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ switchport port-security
+ switchport port-security maximum 1
+ switchport port-security mac-address sticky
+ switchport port-security violation restrict
+ no cdp enable
+ no shutdown
+! Ports avec telephone : le PC est branche derriere le telephone.
+! Donnees dans le VLAN de la zone, voix dans le VLAN 50 ; 2 MAC (PC + telephone).
+! CDP reste actif : c'est lui qui annonce le VLAN voix au telephone.
+interface fastEthernet 0/3
+ description win01 + telephone 1001 (Admin)
+ switchport mode access
+ switchport access vlan 30
+ switchport voice vlan 50
+ switchport nonegotiate
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security mac-address sticky
+ switchport port-security violation restrict
+ no shutdown
+interface fastEthernet 0/4
+ description win02 + telephone 1002 (Users)
+ switchport mode access
+ switchport access vlan 40
+ switchport voice vlan 50
+ switchport nonegotiate
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security mac-address sticky
+ switchport port-security violation restrict
+ no shutdown
+! Ports inutilises : eteints et ranges dans le VLAN parking
+interface range fastEthernet 0/5 - 24 , gigabitEthernet 0/2
+ description INUTILISE
+ switchport mode access
+ switchport access vlan 999
+ shutdown
+exit
+
+! --- Trunk vers le routeur FW01 --------------------------------------
+! Seuls les VLAN utiles passent ; VLAN natif vide ; DTP coupe
+interface gigabitEthernet 0/1
+ description Trunk vers FW01 Gi0/0
+ switchport mode trunk
+ switchport trunk native vlan 998
+ switchport trunk allowed vlan 10,20,30,40,50
+ switchport nonegotiate
+exit
+
+! --- Protection ARP : DHCP snooping + DAI sur le VLAN voix -----------
+! Les telephones prennent leur IP en DHCP (CME sur FW01). Le snooping
+! enregistre chaque bail (MAC <-> IP <-> port) ; DAI rejette toute reponse
+! ARP qui ne correspond pas a un bail : pas d'usurpation de la passerelle.
+! "limit rate" plafonne le nombre de paquets DHCP par seconde et par port :
+! c'est la "limitation par port" demandee. Les autres VLAN sont en IP fixe
+! et proteges par port-security sticky (une IP fixe n'a pas de bail DHCP).
+! Si votre version de Packet Tracer refuse une commande de ce bloc, notez-le
+! dans la doc : port-security reste la protection principale.
+ip dhcp snooping
+ip dhcp snooping vlan 50
+! Sans cette ligne, l'option 82 ajoutee par le switch fait refuser les baux par le routeur
+no ip dhcp snooping information option
+ip arp inspection vlan 50
+interface gigabitEthernet 0/1
+ ip dhcp snooping trust
+ ip arp inspection trust
+interface range fastEthernet 0/3 - 4
+ ip dhcp snooping limit rate 10
+! "ip arp inspection limit rate" existe sur un vrai 2960 mais Packet Tracer
+! le refuse : sur un vrai switch, ajouter "ip arp inspection limit rate 15" ici.
+exit
+! Sauvegarde AVANT de quitter le mode config : en sortant, la console
+! demande le login (login local) et avalerait la ligne suivante
+do write memory
+end
