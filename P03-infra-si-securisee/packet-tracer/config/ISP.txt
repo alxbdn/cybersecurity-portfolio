@@ -2,6 +2,9 @@
 ! ISP - Cisco 2911 - simule le fournisseur d'acces et "Internet"
 ! Hors perimetre de l'entreprise : configuration minimale.
 ! =====================================================================
+! Passage en mode privilegie puis en mode configuration globale
+enable
+configure terminal
 hostname ISP
 no ip domain-lookup
 ! Lien vers FW01 (adresses de documentation RFC 5737)

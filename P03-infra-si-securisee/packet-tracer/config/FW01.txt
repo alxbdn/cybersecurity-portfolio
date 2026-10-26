@@ -2,9 +2,12 @@
 ! FW01 - Cisco 2911 - routeur/pare-feu de la maquette P03
 ! Joue le role de fw01 (nftables) du lab VMware : meme plan d'adressage,
 ! meme matrice des flux, traduite en ACL etendues.
-! A coller en mode configuration (enable puis configure terminal).
+! A coller tel quel depuis le prompt "Router>" ou "Switch>" (repondre "no" au dialogue initial).
 ! Mot de passe de LAB uniquement : a changer avant toute demo publique.
 ! =====================================================================
+! Passage en mode privilegie puis en mode configuration globale
+enable
+configure terminal
 
 ! --- Identite et hygiene de base ------------------------------------
 hostname FW01
@@ -22,8 +25,8 @@ login block-for 120 attempts 3 within 60
 
 ! --- SSH : seul acces distant, depuis win01 --------------------------
 ip domain-name p03.lan
-! Repondre 2048 a la question du nombre de bits
-crypto key generate rsa
+! Cle RSA 2048 bits de l'hote SSH (en une ligne : pas de question interactive)
+crypto key generate rsa general-keys modulus 2048
 ip ssh version 2
 ip ssh authentication-retries 3
 ip ssh time-out 60
@@ -266,6 +269,7 @@ ephone-dn 1
 ephone-dn 2
  number 1002
 exit
+! Sauvegarde AVANT de quitter le mode config : en sortant, la console
+! demande le login (login local) et avalerait la ligne suivante
+do write memory
 end
-
-write memory

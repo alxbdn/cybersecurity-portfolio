@@ -7,7 +7,7 @@ La maquette valide la partie réseau du cahier des charges avant le lab VMware :
 | Exigence | Où dans la maquette |
 |---|---|
 | « La segmentation réseau est à réaliser sur Cisco Packet Tracer, avec les VLAN dédiés » | VLAN 10/20/30/40/50 sur `SW01`, routage inter-VLAN filtré sur `FW01` |
-| « la protection ARP (limitation par port) » | port-security sticky sur chaque port, DHCP snooping + DAI avec `limit rate` sur le VLAN voix |
+| « la protection ARP (limitation par port) » | port-security sticky sur chaque port, DHCP snooping (avec `limit rate` par port) + DAI sur le VLAN voix |
 | « un téléphone VoIP par utilisateur, connecté au réseau » | 2 téléphones IP 7960 dans un VLAN voix, CME sur `FW01` |
 | « Les postes d'administration ont accès au pare-feu, au switch […] en SSH » (fiche d'auto-évaluation) | SSHv2 sur `FW01` et `SW01`, filtré sur l'IP de `win01` |
 | « J'ai indiqué le rôle de chaque commande » | chaque commande des fichiers de [`config/`](config/) est commentée |
@@ -65,7 +65,7 @@ Les adresses WAN et Internet sont des plages de documentation (RFC 5737) : elles
 ## Ordre de montage
 
 1. Poser et câbler les équipements (tableau ci-dessus).
-2. Coller `config/ISP.txt`, puis `config/SW01.txt`, puis `config/FW01.txt` dans la CLI de chaque équipement (`enable`, `configure terminal`, coller). À `crypto key generate rsa`, répondre `2048`.
+2. Coller `config/ISP.txt`, puis `config/SW01.txt`, puis `config/FW01.txt` dans la CLI de chaque équipement, depuis le prompt `Router>` / `Switch>` (chaque fichier commence par `enable` et `configure terminal`).
 3. Configurer les terminaux en IP fixe (*Desktop > IP Configuration*) :
 
    | Machine | IP | Masque | Passerelle | DNS |
@@ -123,7 +123,7 @@ Les adresses WAN et Internet sont des plages de documentation (RFC 5737) : elles
 - **Router-on-a-stick** : un trunk et cinq sous-interfaces suffisent à cette taille. Dans le lab VMware, `fw01` a une carte par zone ; la séparation logique est la même.
 - **ACL sans état** : contrairement à nftables, une ACL Cisco ne suit pas les connexions. Les réponses passent par `established` (TCP) ou par port source (UDP), c'est la limite à citer en soutenance.
 - **`violation restrict` plutôt que `shutdown`** : une MAC inconnue est bloquée et comptée, mais le poste légitime continue de fonctionner. Couper le port transformerait une erreur de câblage en panne.
-- **DAI sur le VLAN voix seulement** : DAI s'appuie sur les baux DHCP. Les autres zones sont en IP fixe (exigence du cahier des charges) et sont protégées par port-security sticky.
+- **DAI sur le VLAN voix seulement** : DAI s'appuie sur les baux DHCP. Les autres zones sont en IP fixe (exigence du cahier des charges) et sont protégées par port-security sticky. Packet Tracer refuse `ip arp inspection limit rate` ; la limitation par port passe par `ip dhcp snooping limit rate` et port-security.
 - **Pas de QoS, de redondance ni de serveur syslog** : ce serait disproportionné pour deux postes. Les journaux restent en local, comme sur `fw01`.
 
 ## Fichiers
